@@ -173,7 +173,7 @@ This will:
 1. Suspend Flux and delete the app + infrastructure Flux Kustomizations (so finalizers can clean up the Tailscale machine and the DO Load Balancer if any).
 2. Run `terragrunt destroy`.
 3. Audit for orphaned DO resources tagged `k8s:<cluster-uuid>` (load balancers, volumes, firewalls) and delete them.
-4. Delete the empty `doks-flux-demo` DigitalOcean project.
+4. Delete the empty `doks-flux-demo-project` DigitalOcean project.
 
 Flux deploy keys on your GitHub fork are not auto-removed -- clean them up at `https://github.com/<you>/doks-flux-demo/settings/keys`.
 
@@ -194,7 +194,7 @@ The companion homelab repo this was extracted from has all of those, if you want
 
 The two knobs you'll likely want to change live in `tofu/deployments/doks/terragrunt.hcl`:
 
-- `cluster_name` -- DigitalOcean cluster name (default: `doks`). Change this if the default would collide with another cluster on your account.
+- `cluster_name` -- DigitalOcean cluster name (default: `doks-flux-demo`). Change this if the default would collide with another cluster on your account.
 - `local.region` -- DigitalOcean region slug (default: `sfo3`). `vpc_name` derives from this automatically (`default-${local.region}`).
 
 The CLI reads `cluster_name` and `project_name` from this file at runtime, so editing terragrunt.hcl is the single point of change. Other values (`node_size`, `node_count`, `project_name`, tags) are intentionally opinionated to keep the demo small; edit them in the same file if you must.

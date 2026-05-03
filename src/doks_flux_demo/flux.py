@@ -34,7 +34,6 @@ def bootstrap(owner: str, repo: str, branch: str, env: dict[str, str]) -> None:
             "--branch", branch,
             "--path", FLUX_PATH,
             "--personal",
-            "--private",
         ],
         env=env,
     )
