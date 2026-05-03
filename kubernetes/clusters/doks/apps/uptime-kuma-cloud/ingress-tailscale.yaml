@@ -13,4 +13,4 @@ spec:
   ingressClassName: tailscale
   tls:
     - hosts:
-        - uptime-kuma-cloud
+        - uptime-kuma-demo

@@ -30,7 +30,7 @@ _VERIFY_DELAY = 2.0
 #       (spec.tls.hosts[0])
 # Update both sides if either is renamed.
 _OPERATOR_HOSTNAME = "doks-flux-demo-operator"
-_PROXY_HOSTNAME_PREFIX = "uptime-kuma-cloud"
+_PROXY_HOSTNAME_PREFIX = "uptime-kuma-demo"
 
 
 @dataclass(frozen=True)
