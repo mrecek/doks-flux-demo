@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,6 +17,11 @@ _out = Console()
 
 _API_BASE = "https://api.tailscale.com/api/v2"
 _HTTP_TIMEOUT = 30.0
+# DELETE on the Tailscale API is documented as synchronous, but a defensive
+# verification (parallel to the DigitalOcean drain check) catches partial
+# successes — e.g., a delete that returned 200 but left the device visible.
+_VERIFY_ATTEMPTS = 3
+_VERIFY_DELAY = 2.0
 
 # Demo-specific device names. These mirror values in the manifests:
 #   - kubernetes/clusters/doks/infrastructure/edge/tailscale/helmrelease.yaml
@@ -87,21 +93,42 @@ def list_orphan_devices(client_id: str, client_secret: str) -> list[TailscaleDev
 
 
 def delete_device(device: TailscaleDevice, client_id: str, client_secret: str) -> bool:
-    """Delete a single tailnet device. Returns True on success."""
+    """Delete a tailnet device and verify it is gone. Returns True on success."""
     try:
         token = _fetch_token(client_id, client_secret)
         _api_delete(f"/device/{device.id}", token)
-        return True
     except urllib.error.HTTPError as exc:
         _out.print(
             f"[yellow]Failed to delete tailnet device {device.hostname} "
             f"({device.id}): HTTP {exc.code}[/yellow]"
         )
+        return False
     except urllib.error.URLError as exc:
         _out.print(
             f"[yellow]Failed to delete tailnet device {device.hostname} "
             f"({device.id}): {exc}[/yellow]"
         )
+        return False
+
+    for _ in range(_VERIFY_ATTEMPTS):
+        try:
+            _api_get(f"/device/{device.id}", token)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return True
+            _out.print(
+                f"[yellow]Could not verify tailnet device {device.hostname} "
+                f"deletion: HTTP {exc.code}[/yellow]"
+            )
+            return True
+        except urllib.error.URLError:
+            return True
+        time.sleep(_VERIFY_DELAY)
+
+    _out.print(
+        f"[yellow]Tailnet device {device.hostname} ({device.id}) still visible "
+        f"after delete; check the Tailscale admin.[/yellow]"
+    )
     return False
 
 

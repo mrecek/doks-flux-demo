@@ -222,6 +222,11 @@ def destroy(
         except SystemExit:
             _out.print("[yellow]terragrunt destroy reported errors; continuing to audit.[/yellow]")
 
+    if cluster_uuid:
+        _out.print()
+        _out.print("[bold]Waiting for DigitalOcean to drain cluster-tagged resources...[/bold]")
+        doctl.wait_for_cluster_drain(cluster_uuid, child_env)
+
     _out.print()
     _out.print("[bold]Auditing DigitalOcean for orphaned resources...[/bold]")
     audit = doctl.audit_orphans(cluster_uuid, _config.project_name, child_env)

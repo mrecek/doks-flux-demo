@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 
 from rich.console import Console
@@ -10,6 +11,15 @@ from rich.console import Console
 from .runner import capture
 
 _out = Console()
+
+# DO async-cleans cluster-tagged droplets, volumes, and firewalls after a DOKS
+# cluster delete returns. The audit runs in that window; without waiting, a
+# volume still attached to a still-running worker droplet trips a 409.
+_DRAIN_POLL_INTERVAL = 5.0
+_DRAIN_TIMEOUT = 300.0
+_DELETE_RETRY_ATTEMPTS = 4
+_DELETE_RETRY_DELAY = 10.0
+_TRANSIENT_DELETE_HINTS = ("409", "attached", "in use", "currently being")
 
 
 @dataclass(frozen=True)
@@ -86,6 +96,7 @@ def audit_orphans(
 
     if tag:
         for kind, args in (
+            ("droplet", ["compute", "droplet", "list"]),
             ("load_balancer", ["compute", "load-balancer", "list"]),
             ("volume", ["compute", "volume", "list"]),
             ("firewall", ["compute", "firewall", "list"]),
@@ -108,17 +119,75 @@ def audit_orphans(
 
 
 def delete_orphan(orphan: OrphanedResource, env: dict[str, str]) -> None:
+    """Delete a single orphaned resource. Retries on transient 409s
+    (volume-still-attached, resource-in-use) up to a few times before giving up."""
     args_by_kind = {
+        "droplet": ["compute", "droplet", "delete", orphan.id, "--force"],
         "load_balancer": ["compute", "load-balancer", "delete", orphan.id, "--force"],
         "volume": ["compute", "volume", "delete", orphan.id, "--force"],
         "firewall": ["compute", "firewall", "delete", orphan.id, "--force"],
     }
-    code, _, stderr = capture(["doctl", *args_by_kind[orphan.kind]], env=env)
-    if code != 0:
+    cmd = ["doctl", *args_by_kind[orphan.kind]]
+    last_stderr = ""
+    for attempt in range(_DELETE_RETRY_ATTEMPTS):
+        code, _, stderr = capture(cmd, env=env)
+        if code == 0:
+            return
+        last_stderr = stderr
+        is_transient = any(hint in stderr.lower() for hint in _TRANSIENT_DELETE_HINTS)
+        if not is_transient or attempt == _DELETE_RETRY_ATTEMPTS - 1:
+            break
         _out.print(
-            f"[yellow]Failed to delete {orphan.kind} {orphan.id} ({orphan.name}): "
-            f"{stderr.strip()}[/yellow]"
+            f"  [dim]{orphan.kind} {orphan.id}: {stderr.strip().splitlines()[0][:90]} — "
+            f"retrying in {_DELETE_RETRY_DELAY:.0f}s[/dim]"
         )
+        time.sleep(_DELETE_RETRY_DELAY)
+    _out.print(
+        f"[yellow]Failed to delete {orphan.kind} {orphan.id} ({orphan.name}): "
+        f"{last_stderr.strip()}[/yellow]"
+    )
+
+
+def wait_for_cluster_drain(
+    cluster_uuid: str,
+    env: dict[str, str],
+    timeout_s: float = _DRAIN_TIMEOUT,
+) -> None:
+    """Block until DO has async-reaped resources tagged k8s:<cluster-uuid>.
+
+    DOKS destroy returns as soon as DO accepts the API call, but droplet,
+    volume, and firewall teardown happens asynchronously after that. Running
+    the orphan audit before drain completes can race into 409 errors on
+    volumes still attached to still-running worker droplets.
+    """
+    tag = f"k8s:{cluster_uuid}"
+    deadline = time.monotonic() + timeout_s
+    last_count: int | None = None
+    while time.monotonic() < deadline:
+        remaining = _count_tagged(tag, env)
+        if remaining == 0:
+            return
+        if remaining != last_count:
+            _out.print(f"  {remaining} cluster-tagged resource(s) still present; waiting...")
+            last_count = remaining
+        time.sleep(_DRAIN_POLL_INTERVAL)
+    _out.print(
+        f"[yellow]Drain wait reached {timeout_s:.0f}s timeout; auditing what remains.[/yellow]"
+    )
+
+
+def _count_tagged(tag: str, env: dict[str, str]) -> int:
+    n = 0
+    for args in (
+        ["compute", "droplet", "list"],
+        ["compute", "volume", "list"],
+        ["compute", "firewall", "list"],
+        ["compute", "load-balancer", "list"],
+    ):
+        for r in _doctl_json(args, env):
+            if tag in r.get("tags", []):
+                n += 1
+    return n
 
 
 def delete_project(project_id: str, env: dict[str, str]) -> None:
