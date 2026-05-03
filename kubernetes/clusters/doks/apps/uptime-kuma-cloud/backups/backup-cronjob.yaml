@@ -1,0 +1,43 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: uptime-kuma-cloud-backup
+  namespace: uptime-kuma-cloud
+  labels:
+    app.kubernetes.io/name: uptime-kuma-cloud
+spec:
+  schedule: "0 8 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: uptime-kuma-cloud
+        spec:
+          serviceAccountName: uptime-kuma-cloud-backup
+          restartPolicy: Never
+          containers:
+            - name: volume-snapshot
+              image: bitnami/kubectl:latest
+              command: ["/bin/bash", "/scripts/snapshot.sh"]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  memory: 128Mi
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+          volumes:
+            - name: scripts
+              configMap:
+                name: uptime-kuma-cloud-backup-scripts
+                defaultMode: 0755

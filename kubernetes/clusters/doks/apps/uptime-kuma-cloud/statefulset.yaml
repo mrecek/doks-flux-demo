@@ -1,0 +1,59 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: uptime-kuma-cloud
+  namespace: uptime-kuma-cloud
+spec:
+  serviceName: uptime-kuma-cloud
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: uptime-kuma-cloud
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: uptime-kuma-cloud
+    spec:
+      containers:
+        - name: uptime-kuma
+          image: louislam/uptime-kuma:2.2.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: UPTIME_KUMA_PORT
+              value: "3001"
+          ports:
+            - name: http
+              containerPort: 3001
+          startupProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 25m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            capabilities:
+              add:
+                - NET_RAW
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: uptime-kuma-cloud-data

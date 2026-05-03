@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - flux-system
+  - infra-edge.yaml
+  - apps-uptime-kuma.yaml
+  # Uncomment to enable daily VolumeSnapshot backups for uptime-kuma:
+  # - apps-uptime-kuma-backups.yaml

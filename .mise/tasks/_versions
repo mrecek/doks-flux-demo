@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE hide=true
+set -euo pipefail
+echo "Python:      $(python3 --version 2>&1)"
+echo "OpenTofu:    $(tofu --version 2>&1 | head -1)"
+echo "Terragrunt:  $(terragrunt --version 2>&1 | head -1)"
+echo "doctl:       $(doctl version 2>&1 | head -1)"
+echo "kubectl:     $(kubectl version --client 2>&1 | head -1)"
+echo "flux:        $(flux --version 2>&1)"
+echo "gh:          $(gh --version 2>&1 | head -1)"
+echo "mise:        $(mise --version 2>&1)"
+echo "uv:          $(uv --version 2>&1)"

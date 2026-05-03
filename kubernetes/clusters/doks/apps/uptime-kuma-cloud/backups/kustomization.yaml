@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - backup-scripts.yaml
+  - backup-rbac.yaml
+  - backup-cronjob.yaml

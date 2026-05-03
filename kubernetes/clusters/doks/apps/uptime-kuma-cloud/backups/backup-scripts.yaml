@@ -1,0 +1,48 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: uptime-kuma-cloud-backup-scripts
+  namespace: uptime-kuma-cloud
+  labels:
+    app.kubernetes.io/name: uptime-kuma-cloud
+data:
+  snapshot.sh: |
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    NS=uptime-kuma-cloud
+    PVC=uptime-kuma-cloud-data
+    RETAIN=14
+    TS=$(date -u +%Y%m%d-%H%M)
+    SNAPSHOT="uptime-kuma-cloud-${TS}"
+
+    echo "Creating VolumeSnapshot ${SNAPSHOT}"
+    cat <<EOF | kubectl apply -f -
+    apiVersion: snapshot.storage.k8s.io/v1
+    kind: VolumeSnapshot
+    metadata:
+      name: ${SNAPSHOT}
+      namespace: ${NS}
+      labels:
+        app.kubernetes.io/name: uptime-kuma-cloud
+        backup.homelab/managed-by: cronjob
+    spec:
+      volumeSnapshotClassName: do-block-storage
+      source:
+        persistentVolumeClaimName: ${PVC}
+    EOF
+
+    echo "Waiting for snapshot readyToUse"
+    kubectl -n "$NS" wait volumesnapshot/"$SNAPSHOT" \
+      --for=jsonpath='{.status.readyToUse}'=true --timeout=10m
+
+    echo "Pruning old snapshots (keep last ${RETAIN})"
+    kubectl -n "$NS" get volumesnapshots \
+      -l backup.homelab/managed-by=cronjob,app.kubernetes.io/name=uptime-kuma-cloud \
+      --sort-by=.metadata.creationTimestamp \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+      | head -n -"$RETAIN" \
+      | xargs -r -I{} kubectl -n "$NS" delete volumesnapshot {}
+
+    echo "VolumeSnapshot complete"

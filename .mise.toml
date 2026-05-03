@@ -1,0 +1,36 @@
+min_version = "2025.1.0"
+
+[tools]
+python = "3.12"
+uv = "latest"
+opentofu = "latest"
+terragrunt = "latest"
+doctl = "latest"
+kubectl = "latest"
+"aqua:fluxcd/flux2" = "latest"
+gh = "latest"
+
+[env]
+PYTHONUNBUFFERED = "1"
+UV_PROJECT_ENVIRONMENT = ".venv"
+VIRTUAL_ENV_DISABLE_PROMPT = "1"
+
+[tasks.bootstrap]
+description = "Install pinned tools and sync Python deps."
+file = ".mise/tasks/_bootstrap"
+
+[tasks.create]
+description = "Provision DOKS, bootstrap Flux, deploy uptime-kuma."
+run = "uv run doks-flux-demo create"
+
+[tasks.destroy]
+description = "Tear down the cluster and clean up DO resources."
+run = "uv run doks-flux-demo destroy"
+
+[tasks.status]
+description = "Show cluster, Flux, and workload health."
+run = "uv run doks-flux-demo status"
+
+[tasks.versions]
+description = "Show tool versions."
+file = ".mise/tasks/_versions"
