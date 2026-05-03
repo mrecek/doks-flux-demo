@@ -174,6 +174,7 @@ This will:
 2. Run `terragrunt destroy`.
 3. Audit for orphaned DO resources tagged `k8s:<cluster-uuid>` (load balancers, volumes, firewalls) and delete them.
 4. Delete the empty `doks-flux-demo-project` DigitalOcean project.
+5. Delete offline tailnet devices created by this demo (the `doks-flux-demo-operator` device and `uptime-kuma-cloud*` proxies). Online devices with similar names are skipped, so a co-tenant cluster on the same tailnet is safe.
 
 Flux deploy keys on your GitHub fork are not auto-removed -- clean them up at `https://github.com/<you>/doks-flux-demo/settings/keys`.
 

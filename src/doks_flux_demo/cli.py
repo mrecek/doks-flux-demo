@@ -177,7 +177,7 @@ def destroy(
         False, "--force", help="Skip confirmation prompts."
     ),
 ) -> None:
-    """Tear down: suspend Flux, delete app + infra, terragrunt destroy, clean up DO orphans."""
+    """Tear down: suspend Flux, delete app + infra, terragrunt destroy, clean up DO + tailnet orphans."""
     interactive = sys.stdin.isatty()
     if not interactive and not force:
         _out.print("[red]Cannot run interactively (not a TTY). Use --force.[/red]")
@@ -230,25 +230,36 @@ def destroy(
         _out.print("[yellow]Cluster still exists; skipping orphan audit.[/yellow]")
         return
 
-    if not audit.orphans and not audit.project_id:
-        _out.print("[green]No orphans found.[/green]")
-        return
+    if audit.orphans or audit.project_id:
+        for orphan in audit.orphans:
+            _out.print(f"  Orphan {orphan.kind}: {orphan.id} ({orphan.name})")
+        if audit.project_id:
+            _out.print(f"  Empty project: {audit.project_name} ({audit.project_id})")
 
-    for orphan in audit.orphans:
-        _out.print(f"  Orphan {orphan.kind}: {orphan.id} ({orphan.name})")
-    if audit.project_id:
-        _out.print(f"  Empty project: {audit.project_name} ({audit.project_id})")
+        if force or _confirm("Delete these orphaned DO resources?", default=True):
+            for orphan in audit.orphans:
+                _out.print(f"Deleting {orphan.kind} {orphan.id}...")
+                doctl.delete_orphan(orphan, child_env)
+            if audit.project_id:
+                _out.print(f"Deleting empty project {audit.project_name}...")
+                doctl.delete_project(audit.project_id, child_env)
+    else:
+        _out.print("[green]No DO orphans found.[/green]")
 
-    if not force and not _confirm("Delete these orphaned resources?", default=True):
-        return
-
-    for orphan in audit.orphans:
-        _out.print(f"Deleting {orphan.kind} {orphan.id}...")
-        doctl.delete_orphan(orphan, child_env)
-
-    if audit.project_id:
-        _out.print(f"Deleting empty project {audit.project_name}...")
-        doctl.delete_project(audit.project_id, child_env)
+    _out.print()
+    _out.print("[bold]Auditing Tailscale tailnet for demo devices...[/bold]")
+    ts_devices = tailscale.list_orphan_devices(
+        user_env.ts_client_id, user_env.ts_client_secret
+    )
+    if ts_devices:
+        for d in ts_devices:
+            _out.print(f"  Tailnet device: {d.hostname} ({d.id}) tags={list(d.tags)}")
+        if force or _confirm("Delete these tailnet devices?", default=True):
+            for d in ts_devices:
+                _out.print(f"Deleting tailnet device {d.hostname}...")
+                tailscale.delete_device(d, user_env.ts_client_id, user_env.ts_client_secret)
+    else:
+        _out.print("[dim]No demo-related tailnet devices found.[/dim]")
 
     _out.print()
     _out.print("[green]Teardown complete.[/green]")
