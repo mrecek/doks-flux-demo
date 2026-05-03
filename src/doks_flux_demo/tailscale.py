@@ -69,14 +69,21 @@ def list_orphan_devices(client_id: str, client_secret: str) -> list[TailscaleDev
     """
     try:
         token = _fetch_token(client_id, client_secret)
-        payload = _api_get("/tailnet/-/devices", token)
+        # ?fields=all is required for the `online` field; without it the API
+        # omits it and our offline filter would silently treat every device
+        # as eligible for deletion.
+        payload = _api_get("/tailnet/-/devices?fields=all", token)
     except (urllib.error.URLError, ValueError, KeyError) as exc:
         _out.print(f"[yellow]Tailnet device audit skipped: {exc}[/yellow]")
         return []
 
     out: list[TailscaleDevice] = []
     for raw in payload.get("devices", []):
-        if raw.get("online"):
+        # Tailscale's API returns connectedToControl as the active-connection
+        # indicator. Conservative: only consider deletion when the field is
+        # explicitly False. True or missing -> skip, so we never touch a device
+        # a co-tenant cluster (e.g. a sibling homelab) is actively using.
+        if raw.get("connectedToControl") is not False:
             continue
         if not _matches_demo(raw):
             continue
